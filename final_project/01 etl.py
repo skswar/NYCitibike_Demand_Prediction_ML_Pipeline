@@ -13,10 +13,6 @@ print("YOUR CODE HERE...")
 
 # COMMAND ----------
 
-# print("hello")
-
-# COMMAND ----------
-
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, TimestampType, DoubleType
 
 # COMMAND ----------
