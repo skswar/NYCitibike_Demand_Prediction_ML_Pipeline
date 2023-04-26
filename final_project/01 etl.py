@@ -13,6 +13,10 @@ print("YOUR CODE HERE...")
 
 # COMMAND ----------
 
+print("hello")
+
+# COMMAND ----------
+
 import json
 
 # Return Success
