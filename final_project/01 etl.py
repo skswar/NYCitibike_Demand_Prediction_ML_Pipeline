@@ -66,6 +66,7 @@ query = (
     .format("delta")
     .option("path", output_path)
     .option("checkpointLocation", output_path + "/checkpoint")
+    .trigger(availableNow=True)
     .start()
 )
 
@@ -140,6 +141,7 @@ query = (
     .format("delta")
     .option("path", output_path2)
     .option("checkpointLocation", output_path2 + "/checkpoint")
+    .trigger(availableNow=True)
     .start()
 )
 
@@ -148,12 +150,12 @@ query.awaitTermination()
 
 # COMMAND ----------
 
-files=dbutils.fs.ls("dbfs:/FileStore/tables/G07")
+# files=dbutils.fs.ls("dbfs:/FileStore/tables/G07")
 # count=0
-for file in files:
+# for file in files:
 #     count+=1
 # print(count)
-    print(file.name)
+#     print(file.name)
 
 # COMMAND ----------
 
