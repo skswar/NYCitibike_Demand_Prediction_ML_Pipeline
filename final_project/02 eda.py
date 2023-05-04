@@ -17,7 +17,7 @@ spark.sql(f"USE {GROUP_DB_NAME}")
 
 # COMMAND ----------
 
-events_df = spark.read.format('csv').option('header', True).option('inferSchema', True).load(BIKE_TRIP_DATA_PATH)
+events_df = spark.read.format('delta').option('header', True).option('inferSchema', True).load(BIKE_TRIP_DATA_PATH)
 display(events_df)
 
 # COMMAND ----------
@@ -116,7 +116,7 @@ wdf.createOrReplaceTempView("my_weather_view")
 # MAGIC ON DATE(tab1.started_at) = DATE(from_unixtime(tab2.dt))
 # MAGIC AND HOUR(tab1.started_at) = HOUR(from_unixtime(tab2.dt))
 # MAGIC WHERE DATE(from_unixtime(tab2.dt)) BETWEEN '2022-01-28' AND '2022-01-30'
-# MAGIC 
+# MAGIC
 # MAGIC -- SELECT min(DATE(from_unixtime(dt))) as mindate, max(DATE(from_unixtime(dt))) as maxdate
 # MAGIC -- FROM my_weather_view
 
