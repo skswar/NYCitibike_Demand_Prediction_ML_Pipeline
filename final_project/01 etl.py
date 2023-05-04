@@ -97,7 +97,7 @@ weather_schema = StructType([
   StructField("lat", DoubleType(), True),
   StructField("lon", DoubleType(), True),  
   StructField("timezone", StringType(), True),
-  StructField("timezone_offset", IntegerType(), True),  
+  StructField("timezone_offset", IntegerType(), True)
 # dt:integer
 # temp:double
 # feels_like:double
@@ -223,7 +223,8 @@ from pyspark.sql.functions import *
 # MAGIC
 # MAGIC SELECT from_unixtime(dt) as abc,*
 # MAGIC FROM weather_history_delta 
-# MAGIC where DATE(from_unixtime(dt)) = '2022-11-05'
+# MAGIC where DATE(from_unixtime(dt)) = '2022-06-04'
+# MAGIC order by abc
 
 # COMMAND ----------
 
@@ -253,31 +254,16 @@ clean_weather_df.createOrReplaceTempView("clean_weather_history_delta")
 
 # MAGIC %sql
 # MAGIC --- Checking lon, lat for weather station
-# MAGIC SELECT DISTINCT lat, lon
+# MAGIC SELECT DISTINCT lat, lon, timezone, timezone_offset, loc
 # MAGIC FROM clean_weather_history_delta 
-
-# COMMAND ----------
-
-# delta_table_name = 'weather_g07'
-# df_weather_g07.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name)
-
-# COMMAND ----------
-
-bike_weather_df=spark.sql("""SELECT parsed_dt as weather_date,* 
-FROM bike_trip_history_delta as tab1 
-LEFT JOIN clean_weather_history_delta as tab2
-ON DATE(tab1.started_at) = DATE(parsed_dt) 
-AND HOUR(tab1.started_at) = HOUR(parsed_dt)
-WHERE start_station_name = 'Broadway & W 25 St'""")
 
 # COMMAND ----------
 
 # MAGIC %sql
 # MAGIC --checking if all weather data is available or we are getting any NULLS
-# MAGIC
 # MAGIC SELECT min(tab1.started_at), max(tab1.started_at) 
 # MAGIC FROM bike_trip_history_delta as tab1 
-# MAGIC LEFT JOIN clean_weather_history_delta as tab2
+# MAGIC LEFT JOIN clean_weather_final_df_delta_delta as tab2--clean_weather_history_delta as tab2
 # MAGIC ON DATE(tab1.started_at) = DATE(parsed_dt) 
 # MAGIC AND HOUR(tab1.started_at) = HOUR(parsed_dt)
 # MAGIC WHERE start_station_name = 'Broadway & W 25 St'
@@ -290,7 +276,7 @@ WHERE start_station_name = 'Broadway & W 25 St'""")
 # MAGIC
 # MAGIC SELECT distinct(DATE(tab1.started_at)) --min(tab1.started_at), max(tab1.started_at), count(*) 
 # MAGIC FROM bike_trip_history_delta as tab1 
-# MAGIC LEFT JOIN clean_weather_history_delta as tab2
+# MAGIC LEFT JOIN weather_final_df_delta as tab2 --clean_weather_history_delta as tab2
 # MAGIC ON DATE(tab1.started_at) = DATE(parsed_dt) 
 # MAGIC AND HOUR(tab1.started_at) = HOUR(parsed_dt)
 # MAGIC WHERE start_station_name = 'Broadway & W 25 St'
@@ -305,44 +291,202 @@ WHERE start_station_name = 'Broadway & W 25 St'""")
 
 # COMMAND ----------
 
-## Our code for calling weather API
-def executeRestApi(verb, url):
-  body = json.dumps({})
-  print("***")
-  headers = {
-      'content-type': "application/json"
-  }  
-  res = None
-  print("***")
-  # Make API request, get response object back, create dataframe from above schema.
-  try:
-    print("wdw")
-    if verb == "get":
-      res = requests.get(url, data=body, headers=headers)
-      print("inside get")
-    else:
-      res = requests.post(url, data=body, headers=headers)
-      print("inside post")
-    print(res)
-  except Exception as e:
-    print("***")
-    return e  
-    if res != None and res.status_code == 200:
-        return json.loads(res.text)  
-    return None
+import requests, json
+
+# base URL
+BASE_URL = "https://history.openweathermap.org/data/2.5/history/city?"
+lat = "40.712"
+lon = "-74.006"
+
+# upadting the URL
+URL = BASE_URL + "lat=" + lat + "&lon=" + lon + "&type=hour&start=1667260800&end=1667865600" + "&appid=" + "10db4449c9624126b288cedc8a5cca2d"
+
+# HTTP request
+response = requests.get(URL).json()
+
+URL = BASE_URL + "lat=" + lat + "&lon=" + lon + "&type=hour&start=1654362000&end=1654376400" + "&appid=" + "10db4449c9624126b288cedc8a5cca2d"
+
+# HTTP request
+response2 = requests.get(URL).json()
+
 
 # COMMAND ----------
 
-# try2=executeRestApi("get","http://api.openweathermap.org/data/2.5/onecall/timemachine?lat=33.44&lon=-94.04&exclude=hourly,daily&appid=2e8cb9a16f0c29402d9dc70ee400d311")
+#response['list']
+loc="NYC"
+lat=40.712
+lon=-74.006
+timezone="America/New_York"
+timezone_offset=-14400
 
-try2 = executeRestApi("get",'https://api.openweathermap.org/data/2.5/onecall/timemachine?lat=60&lon=30&dt=1683177254&appid=2e8cb9a16f0c29402d9dc70ee400d311&only_current={true}')
 
-display(try2)
+list_weather = list()
+
+for i in range(len(response['list'])):
+    dt=0
+    temp=0
+    feels_like=0
+    pressure=0
+    humidity=0
+    dew_point=0
+    uvi=0
+    clouds=0
+    visibility=0
+    wind_speed=0
+    wind_deg=0
+    pop=0
+    snow_1h=0
+    id=0
+    main=0
+    description=0
+    icon=0
+
+    dt = response['list'][i]['dt']
+    temp = response['list'][i]['main']['temp']+0.0
+    feels_like = response['list'][i]['main']['feels_like']
+    pressure = response['list'][i]['main']['pressure']
+    humidity = response['list'][i]['main']['humidity']
+    dew_point=0.0
+    uvi=0.0
+    clouds = response['list'][i]['clouds']['all']
+    wind_speed = response['list'][i]['wind']['speed']+0.0
+    wind_deg = response['list'][i]['wind']['deg']
+    pop=0.0
+    snow_1h=0.0
+    id = response['list'][i]['weather'][0]['id']
+    main = response['list'][i]['weather'][0]['main']
+    description = response['list'][i]['weather'][0]['description']
+    icon = response['list'][i]['weather'][0]['icon']
+    visibility=0
+
+    list_weather.append([dt,temp,feels_like,pressure,humidity,dew_point,uvi,clouds,visibility,wind_speed,wind_deg,pop,snow_1h,id,main,description,icon,
+    loc,lat,lon,timezone,timezone_offset])
+
+for i in range(len(response2['list'])):
+    dt=0
+    temp=0
+    feels_like=0
+    pressure=0
+    humidity=0
+    dew_point=0
+    uvi=0
+    clouds=0
+    visibility=0
+    wind_speed=0
+    wind_deg=0
+    pop=0
+    snow_1h=0
+    id=0
+    main=0
+    description=0
+    icon=0
+
+    dt = response2['list'][i]['dt']
+    temp = response2['list'][i]['main']['temp']+0.0
+    feels_like = response2['list'][i]['main']['feels_like']+0.0
+    pressure = response2['list'][i]['main']['pressure']
+    humidity = response2['list'][i]['main']['humidity']
+    dew_point=0.0
+    uvi=0.0
+    clouds = response2['list'][i]['clouds']['all']
+    wind_speed = response2['list'][i]['wind']['speed']+0.0
+    wind_deg = response2['list'][i]['wind']['deg']
+    pop=0.0
+    snow_1h=0.0
+    id = response2['list'][i]['weather'][0]['id']
+    main = response2['list'][i]['weather'][0]['main']
+    description = response2['list'][i]['weather'][0]['description']
+    icon = response2['list'][i]['weather'][0]['icon']
+    visibility=0
+
+    list_weather.append([dt,temp,feels_like,pressure,humidity,dew_point,uvi,clouds,visibility,wind_speed,wind_deg,pop,snow_1h,id,main,description,icon,
+    loc,lat,lon,timezone,timezone_offset])
 
 # COMMAND ----------
 
+weather_api_df = spark.createDataFrame(data=list_weather, schema = weather_schema)
+display(weather_api_df)
+
+# COMMAND ----------
+
+##creating Temp view for weather API
+weather_api_df.createOrReplaceTempView("weather_api_df_delta")
+
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select distinct(from_unixtime(dt)) as dt
+# MAGIC FROM weather_api_df_delta
+# MAGIC order by dt
+
+# COMMAND ----------
+
+weather_api_df_stg1 = spark.sql(
+"""
+with cte as(
+SELECT from_unixtime(dt) as parsed_dt,*
+FROM weather_api_df_delta
+)
+select parsed_dt, temp, feels_like, pressure, humidity, dew_point, uvi, clouds, visibility, wind_speed, wind_deg, pop, snow_1h, id, main, description, icon, loc, lat, lon, timezone, timezone_offset
+from cte
+"""
+)
+
+# COMMAND ----------
+
+weather_final_df = clean_weather_df.union(weather_api_df_stg1)
+weather_final_df.createOrReplaceTempView("weather_final_df_delta")
+
+
+# COMMAND ----------
+
+#removing any duplicate timestamps from weather data
+clean_weather_final_df_delta = spark.sql(
+"""
+with cte as(
+SELECT *,
+row_number() over (PARTITION BY parsed_dt ORDER BY id desc) as rnum
+FROM weather_final_df_delta 
+)
+select parsed_dt, temp, feels_like, pressure, humidity, dew_point, uvi, clouds, visibility, wind_speed, wind_deg, pop, snow_1h, id, main, description, icon, loc, lat, lon, timezone, timezone_offset
+from cte
+where rnum=1
+"""
+)
+
+clean_weather_final_df_delta.createOrReplaceTempView("clean_weather_final_df_delta_delta")
+
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC --Checking if any duplicate weather data still persist
+# MAGIC SELECT parsed_dt as abc,count(*)
+# MAGIC FROM clean_weather_final_df_delta_delta 
+# MAGIC GROUP BY parsed_dt
+# MAGIC HAVING count(*)>1
+
+# COMMAND ----------
+
+bike_weather_df=spark.sql("""SELECT parsed_dt as weather_date,* 
+FROM bike_trip_history_delta as tab1 
+LEFT JOIN clean_weather_final_df_delta_delta as tab2
+ON DATE(tab1.started_at) = DATE(parsed_dt) 
+AND HOUR(tab1.started_at) = HOUR(parsed_dt)
+WHERE start_station_name = 'Broadway & W 25 St'""")
+
+# COMMAND ----------
+
+##creating a silver table which is merged of weather and bike trip
 delta_table_name = 'bike_weather_g07'
 bike_weather_df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name)
+
+# COMMAND ----------
+
+##creating a silver table only for weather with api imputed data to use during EDA
+delta_table_name = 'weather_imputed_g07'
+clean_weather_final_df_delta.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name)
 
 # COMMAND ----------
 
