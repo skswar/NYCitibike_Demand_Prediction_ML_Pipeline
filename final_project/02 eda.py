@@ -247,11 +247,11 @@ merged_df.printSchema()
 # COMMAND ----------
 
 from pyspark.sql.functions import col,round
-from pyspark.sql.functions import hour
+from pyspark.sql.functions import hour,date_trunc
 from pyspark.sql.types import StringType, FloatType
 merged_df = merged_df.withColumn("temp", col("temp").cast(FloatType()))
-merged_df = merged_df.withColumn("rounded_temp", round(col("temp"), 0))
-display(merged_df)
+merged_df = merged_df.withColumn("rounded_temp", round(col("temp"), -1))
+display(merged_df.limit(5))
 
 # COMMAND ----------
 
@@ -261,6 +261,46 @@ temperature_hourly_trend = merged_df.groupBy("rounded_temp", hour("started_at").
     .orderBy("rounded_temp", "hour")
 
 display(temperature_hourly_trend)
+
+
+# COMMAND ----------
+
+import pyspark.sql.functions as F
+
+# COMMAND ----------
+
+hourly_trend = merged_df.groupBy(F.date_trunc("hour", F.col("started_at")).alias("hour"), F.col("temp")) \
+    .agg(F.count("ride_id").alias("num_rides")) \
+    .orderBy("hour", "temp")
+
+display(hourly_trend)
+
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC General trend as expected. As temperature Rises more people ride bicycles 
+
+# COMMAND ----------
+
+hourly_trend_viz = merged_df.groupBy(F.date_trunc("hour", F.col("started_at")).alias("hour"), F.col("visibility")) \
+    .agg(F.count("ride_id").alias("num_rides")) \
+    .orderBy("hour", "visibility")
+
+display(hourly_trend_viz)
+
+
+# COMMAND ----------
+
+hourly_trend_viz.select('visibility').distinct().collect()
+
+# COMMAND ----------
+
+daily_trend = merged_df.groupBy(F.date_trunc("day", F.col("started_at")).alias("day"), F.col("rounded_temp")) \
+    .agg(F.count("ride_id").alias("num_rides")) \
+    .orderBy("day", "rounded_temp")
+
+display(daily_trend)
 
 
 # COMMAND ----------
