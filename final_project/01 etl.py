@@ -237,6 +237,10 @@ order by startdate
 
 # COMMAND ----------
 
+display(bike_trips_df)
+
+# COMMAND ----------
+
 bike_trips_df.createOrReplaceTempView("bike_trips_count_delta")
 
 # COMMAND ----------
@@ -387,6 +391,10 @@ response = requests.get(URL).json()
 
 URL = BASE_URL + "lat=" + lat + "&lon=" + lon + "&type=hour&start=1654362000&end=1654376400" + "&appid=" + "10db4449c9624126b288cedc8a5cca2d"
 response2 = requests.get(URL).json()
+
+# COMMAND ----------
+
+response
 
 # COMMAND ----------
 
@@ -595,20 +603,25 @@ ON tab1.startdate = tab2.parsed_dt
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC #### Adding Zordering on the column on which we are joining data with other tables and writing as a delta file
+
+# COMMAND ----------
+
 ##creating a silver table which is merged of weather and bike trip
 delta_table_name = 'bike_weather_g07'
-bike_weather_df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name)
+bike_weather_df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).option("zOrderByCol", "startdate").saveAsTable(delta_table_name)
 
 # COMMAND ----------
 
 ##creating a silver table only for weather with api imputed data to use during EDA
 delta_table_name = 'weather_imputed_g07'
-clean_weather_final_df_delta.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name)
+clean_weather_final_df_delta.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).option("zOrderByCol", "parsed_dt").saveAsTable(delta_table_name)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Getting the Realtime data from the three other Bronze Tables
+# MAGIC #### Getting the Realtime data from the three other Bronze Tables and preparing corresponding silver tables
 
 # COMMAND ----------
 
@@ -622,14 +635,10 @@ read_path_rt_stationinfo = BRONZE_STATION_INFO_PATH
 read_path_rt_stationstatus = BRONZE_STATION_STATUS_PATH
 read_path_rt_weather = BRONZE_NYC_WEATHER_PATH
 
-#reading realtime weather
-weather_real_time = spark.read.format("delta").option("ignoreChanges", "true").load(read_path_rt_weather)
-display(weather_real_time)
-
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Pulling the Station Info Bronze Data For our Station
+# MAGIC #### Pulling the Station Info/Status Bronze Data For our station and preparing Silver table for it
 
 # COMMAND ----------
 
@@ -645,22 +654,95 @@ GROUP_STATION_ASSIGNMENT
 # COMMAND ----------
 
 # MAGIC %sql
+# MAGIC -- select count(*) from stationinfo_delta --1907
 # MAGIC select * from stationinfo_delta
-# MAGIC where name = "Broadway & W 25 St"
+# MAGIC where station_id = "daefc84c-1b16-4220-8e1f-10ea4866fdc7"
 
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC -- select count(*) from stationinfo_delta --1907
 # MAGIC -- select count(*) from stationstatus_delta --4006993
-# MAGIC
-# MAGIC select 
-# MAGIC station_id,name,region_id,short_name,lat,lon,capacity,num_bikes_available,is_installed,num_bikes_disabled,
-# MAGIC from_unixtime(last_reported) as last_reported
-# MAGIC from stationinfo_delta sid
-# MAGIC right join stationstatus_delta ssd
-# MAGIC on sid.station_id = ssd.station_id
-# MAGIC where sid.name = "Broadway & W 25 St"
+# MAGIC select from_unixtime(last_reported) as sdate,* 
+# MAGIC from stationstatus_delta
+# MAGIC where station_id = "daefc84c-1b16-4220-8e1f-10ea4866fdc7"
+# MAGIC order by from_unixtime(last_reported) desc
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ##### Preparing the Silver Table for Realtime Station Info Data
+
+# COMMAND ----------
+
+realtime_bike_status = spark.sql(
+"""
+WITH CTE AS(
+select sid.station_id,name,region_id,short_name,lat,lon,from_unixtime(last_reported) as last_reported,capacity,num_bikes_available,
+num_docks_available,is_installed,num_bikes_disabled,station_status, (capacity-num_bikes_available-num_bikes_disabled) net_availability,
+ROW_NUMBER() OVER (PARTITION BY DATE(from_unixtime(last_reported)), HOUR(from_unixtime(last_reported)) ORDER BY from_unixtime(last_reported)) AS RNUM
+from stationinfo_delta sid
+right join stationstatus_delta ssd
+on sid.station_id = ssd.station_id
+where sid.name = "Broadway & W 25 St"
+)
+,cte2 as (
+SELECT
+date_format(date_trunc('hour',last_reported),'yyyy-MM-dd HH:mm:ss') as last_reported_hour ,capacity,num_bikes_available,
+num_docks_available,num_bikes_disabled,net_availability, LAG(net_availability) OVER(ORDER BY date_format(date_trunc('hour',last_reported),'yyyy-MM-dd HH:mm:ss')) lagged
+FROM CTE WHERE RNUM=1
+order by last_reported
+)
+select *,ifnull(net_availability-lagged,0) net_differece
+FROM cte2
+"""
+)
+
+# COMMAND ----------
+
+realtime_bike_status.createOrReplaceTempView('realtime_bike_status_delta')
+
+# COMMAND ----------
+
+display(realtime_bike_status)
+
+# COMMAND ----------
+
+delta_table_name = "realtime_bike_status"
+realtime_bike_status.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name) 
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC #### Preparing Real Time Weather Silver Table Data
+
+# COMMAND ----------
+
+#reading realtime weather
+weather_real_time = spark.read.format("delta").option("ignoreChanges", "true").load(read_path_rt_weather)
+weather_real_time.createOrReplaceTempView('weather_real_time_delta')
+display(weather_real_time)
+
+# COMMAND ----------
+
+realtime_bike_weather = spark.sql(
+"""
+select last_reported_hour as startdate, net_differece,
+from_unixtime(dt) as parsed_date,temp,feels_like, pressure, humidity, dew_point, uvi, clouds, visibility, wind_speed, wind_deg, pop, weather.main[0] as main,weather.description[0] as description
+from realtime_bike_status_delta as stg1
+LEFT JOIN weather_real_time_delta as stg2
+on stg1.last_reported_hour = from_unixtime(stg2.dt)
+where stg2.temp is not null
+order by stg1.last_reported_hour
+""")
+
+# COMMAND ----------
+
+display(realtime_bike_weather)
+
+# COMMAND ----------
+
+delta_table_name = "realtime_bike_weather_merged"
+realtime_bike_weather.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name) 
 
 # COMMAND ----------
 
