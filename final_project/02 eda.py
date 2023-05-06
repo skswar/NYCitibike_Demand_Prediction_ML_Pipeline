@@ -29,7 +29,9 @@ import pyspark.sql.functions as F
 
 # COMMAND ----------
 
-
+# MAGIC %md
+# MAGIC ###We have saved the visualizations as a HTML file which has both the EDA code and the plots.
+# MAGIC ###The HTML file has been uploaded on our Github repo.(02 eda.html)
 
 # COMMAND ----------
 
@@ -130,7 +132,6 @@ display(avg_trips_by_holiday_status)
 # MAGIC %md 
 # MAGIC As we suspected that on a holiday we have lesser number of people using our bikes further confirming our hypothesis that the bikes at this station is being used primarily for commuting to work rather than leisure rides
 
-
 # COMMAND ----------
 
 # MAGIC %md
@@ -191,10 +192,6 @@ display(hourly_trend)
 #     .orderBy("day", "rounded_temp")
 
 # display(daily_trend)
-
-
-# COMMAND ----------
-
 
 
 # COMMAND ----------
