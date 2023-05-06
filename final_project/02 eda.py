@@ -29,12 +29,7 @@ import pyspark.sql.functions as F
 
 # COMMAND ----------
 
-files=dbutils.fs.ls("dbfs:/FileStore/tables/G07")
-# count=0
-for file in files:
-#     count+=1
-# print(count)
-    print(file.name)
+
 
 # COMMAND ----------
 
@@ -134,6 +129,7 @@ display(avg_trips_by_holiday_status)
 
 # MAGIC %md 
 # MAGIC As we suspected that on a holiday we have lesser number of people using our bikes further confirming our hypothesis that the bikes at this station is being used primarily for commuting to work rather than leisure rides
+
 
 # COMMAND ----------
 
