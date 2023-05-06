@@ -187,15 +187,16 @@ spark.read.format("delta").load(delta_path).createOrReplaceTempView("bike_trip_h
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Creating a temp in order to have a datcolumn with hours data parsed only. This column will be used later for grouping bike trips data and get counts. We are pulling only our station data where our station is either the start or end.
+# MAGIC #### Creating a temp in order to have a date column with hours data parsed only. This column will be used later for grouping bike trips data and get counts. We are pulling only our station data where our station is either the start or end.
 
 # COMMAND ----------
 
 spark.sql(
 """
 select
-date_format(date_trunc('hour',started_at),'yyyy-MM-dd HH:mm:ss') as startdate
-,*
+date_format(date_trunc('hour',started_at),'yyyy-MM-dd HH:mm:ss') as startdate,
+date_format(date_trunc('hour',ended_at),'yyyy-MM-dd HH:mm:ss') as enddate,
+*
 from bike_trip_history_delta
 where start_station_name = "Broadway & W 25 St"
 OR end_station_name = "Broadway & W 25 St"
@@ -218,26 +219,22 @@ OR end_station_name = "Broadway & W 25 St"
 
 bike_trips_df = spark.sql(
 """
-with cte as (
-select
-startdate,
-sum(case when start_station_name="Broadway & W 25 St" then 1 else 0 end) tripstarted_at_our_station,
-sum(case when DATE(ended_at)=DATE(started_at) and HOUR(started_at)=HOUR(ended_at) 
-        and end_station_name = "Broadway & W 25 St"
-            then 1 else 0 end) tripend_at_our_station
+with cte1 as(
+select startdate, sum(case when start_station_name="Broadway & W 25 St" then 1 else 0 end) tripstarted_at_our_station
 from bike_trip_history_delta_2
-group by startdate
-)
+group by startdate)
+,cte2 AS (
+select enddate, sum(case when end_station_name="Broadway & W 25 St" then 1 else 0 end) tripend_at_our_station
+from bike_trip_history_delta_2
+group by enddate)
 select startdate, tripstarted_at_our_station bike_leaving_our_station, tripend_at_our_station bike_starting_our_station,
 (tripend_at_our_station-tripstarted_at_our_station) as net_trip_difference
-from cte
-order by startdate
+from cte1 as tab1
+inner join cte2 as tab2
+on tab1.startdate=tab2.enddate
+order by tab1.startdate
 """
 )
-
-# COMMAND ----------
-
-display(bike_trips_df)
 
 # COMMAND ----------
 
@@ -303,10 +300,10 @@ spark.read.format("delta").load(delta_path).createOrReplaceTempView("weather_his
 # MAGIC -- 2022-10-30 19:00:00
 # MAGIC -- 2022-10-30 18:00:00
 # MAGIC
-# MAGIC SELECT from_unixtime(dt) as abc,*
+# MAGIC SELECT from_unixtime(dt) as dt,*
 # MAGIC FROM weather_history_delta 
 # MAGIC where DATE(from_unixtime(dt)) = '2022-06-04'
-# MAGIC order by abc
+# MAGIC order by dt
 
 # COMMAND ----------
 
@@ -391,10 +388,6 @@ response = requests.get(URL).json()
 
 URL = BASE_URL + "lat=" + lat + "&lon=" + lon + "&type=hour&start=1654362000&end=1654376400" + "&appid=" + "10db4449c9624126b288cedc8a5cca2d"
 response2 = requests.get(URL).json()
-
-# COMMAND ----------
-
-response
 
 # COMMAND ----------
 
@@ -604,7 +597,7 @@ ON tab1.startdate = tab2.parsed_dt
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Adding Zordering on the column on which we are joining data with other tables and writing as a delta file
+# MAGIC #### Adding Z-Ordering on the column on which we are joining data with other tables and writing as a delta file
 
 # COMMAND ----------
 
@@ -662,7 +655,7 @@ GROUP_STATION_ASSIGNMENT
 
 # MAGIC %sql
 # MAGIC -- select count(*) from stationstatus_delta --4006993
-# MAGIC select from_unixtime(last_reported) as sdate,* 
+# MAGIC select from_unixtime(last_reported) as date,num_bikes_available,num_bikes_disabled,* 
 # MAGIC from stationstatus_delta
 # MAGIC where station_id = "daefc84c-1b16-4220-8e1f-10ea4866fdc7"
 # MAGIC order by from_unixtime(last_reported) desc
@@ -679,7 +672,7 @@ realtime_bike_status = spark.sql(
 WITH CTE AS(
 select sid.station_id,name,region_id,short_name,lat,lon,from_unixtime(last_reported) as last_reported,capacity,num_bikes_available,
 num_docks_available,is_installed,num_bikes_disabled,station_status, (capacity-num_bikes_available-num_bikes_disabled) net_availability,
-ROW_NUMBER() OVER (PARTITION BY DATE(from_unixtime(last_reported)), HOUR(from_unixtime(last_reported)) ORDER BY from_unixtime(last_reported)) AS RNUM
+ROW_NUMBER() OVER (PARTITION BY DATE(from_unixtime(last_reported)), HOUR(from_unixtime(last_reported)) ORDER BY from_unixtime(last_reported) DESC) AS RNUM
 from stationinfo_delta sid
 right join stationstatus_delta ssd
 on sid.station_id = ssd.station_id
@@ -687,13 +680,14 @@ where sid.name = "Broadway & W 25 St"
 )
 ,cte2 as (
 SELECT
-date_format(date_trunc('hour',last_reported),'yyyy-MM-dd HH:mm:ss') as last_reported_hour ,capacity,num_bikes_available,
-num_docks_available,num_bikes_disabled,net_availability, LAG(net_availability) OVER(ORDER BY date_format(date_trunc('hour',last_reported),'yyyy-MM-dd HH:mm:ss')) lagged
+date_format(date_trunc('hour',last_reported),'yyyy-MM-dd HH:mm:ss') as last_reported_hour ,capacity,
+ifnull(LAG(num_bikes_available) OVER(ORDER BY date_format(date_trunc('hour',last_reported),'yyyy-MM-dd HH:mm:ss')),0) num_bikes_available,
+num_docks_available,num_bikes_disabled,net_availability
 FROM CTE WHERE RNUM=1
-order by last_reported
 )
-select *,ifnull(net_availability-lagged,0) net_differece
+select *, num_bikes_available - ifnull(LAG(num_bikes_available) OVER(ORDER BY last_reported_hour),0) net_difference
 FROM cte2
+order by last_reported_hour
 """
 )
 
@@ -713,7 +707,7 @@ realtime_bike_status.write.format("delta").mode("overwrite").option("overwriteSc
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Preparing Real Time Weather Silver Table Data
+# MAGIC #### Preparing Real Time Bike-Weather Merged Silver Table Data
 
 # COMMAND ----------
 
@@ -726,7 +720,7 @@ display(weather_real_time)
 
 realtime_bike_weather = spark.sql(
 """
-select last_reported_hour as startdate, net_differece,
+select last_reported_hour as startdate, num_bikes_available, net_difference as net_differece,
 from_unixtime(dt) as parsed_date,temp,feels_like, pressure, humidity, dew_point, uvi, clouds, visibility, wind_speed, wind_deg, pop, weather.main[0] as main,weather.description[0] as description
 from realtime_bike_status_delta as stg1
 LEFT JOIN weather_real_time_delta as stg2
