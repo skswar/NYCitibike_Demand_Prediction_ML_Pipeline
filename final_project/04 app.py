@@ -4,14 +4,13 @@
 # COMMAND ----------
 
 # DBTITLE 0,YOUR APPLICATIONS CODE HERE...
-# start_date = str(dbutils.widgets.get('01.start_date'))
-# end_date = str(dbutils.widgets.get('02.end_date'))
-# hours_to_forecast = int(dbutils.widgets.get('03.hours_to_forecast'))
-# promote_model = bool(True if str(dbutils.widgets.get('04.promote_model')).lower() == 'yes' else False)
+start_date = str(dbutils.widgets.get('01.start_date'))
+end_date = str(dbutils.widgets.get('02.end_date'))
+hours_to_forecast = int(dbutils.widgets.get('03.hours_to_forecast'))
+promote_model = bool(True if str(dbutils.widgets.get('04.promote_model')).lower() == 'yes' else False)
 
-# print(start_date,end_date,hours_to_forecast, promote_model)
-
-# print("YOUR CODE HERE...")
+print(start_date,end_date,hours_to_forecast, promote_model)
+print("YOUR CODE HERE...")
 
 # COMMAND ----------
 
@@ -114,17 +113,36 @@ display(model_prod)
 
 # COMMAND ----------
 
-# silverrealtime_bike_weather_merged
-test_data = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverrealtime_bike_weather_merged') 
-test_data = test_data.withColumnRenamed("startdate", "ds")
-test_data = test_data.withColumnRenamed("net_differece", "y")
-test_data_df= test_data.toPandas()
-display(test_data_df)
+#readiong the data used for train
+data = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverbike_weather_g07') 
+data.createOrReplaceTempView("train_data")
+
+#reading the real time weather data
+weather_real_time = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverweather_real_time_filtered')
+weather_real_time.createOrReplaceTempView('silverweather_real_time_filtered')
+
+#preparing future dataframe for prediction
+forecast_df = spark.sql(
+"""
+with cte as(
+select startdate, temp, humidity from train_data 
+where startdate >'2023-01-01T00:00:00.000+0000'
+union 
+select startdate, temp, humidity from silverweather_real_time_filtered 
+where startdate > (select max(startdate) from train_data)
+)
+select startdate as ds,temp,humidity
+from cte order by startdate
+"""
+)
+forecast_df_pd = forecast_df.toPandas()
+
 
 # COMMAND ----------
 
-staging_forecast = model_staging.predict(test_data.toPandas())[['ds', 'yhat']]
-prod_forecast = model_prod.predict(test_data.toPandas())[['ds', 'yhat']]
+staging_forecast = model_staging.predict(forecast_df_pd)[['ds', 'yhat']]
+prod_forecast = model_prod.predict(forecast_df_pd)[['ds', 'yhat']]
+
 
 # COMMAND ----------
 
@@ -135,91 +153,197 @@ df_forecast
 
 # COMMAND ----------
 
+##the following code will create a future forecast with inventory change 
+df_forecast=spark.createDataFrame(df_forecast)
+df_forecast.createOrReplaceTempView('forecast_df')
 
-# promote_model = True # Remove this line
-# promote_model = False
-if promote_model:
-    client.transition_model_version_stage(
-    name=model_details.name,
-    version=model_details.version,
-    stage='Production')
-else:
-client.transition_model_version_stage(
-name=model_details.name,
-version=model_details.version,
-stage='Staging')
+realtime_bike_status = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverrealtime_bike_status')
+realtime_bike_status.createOrReplaceTempView('realtime_bike_status')
+
+forecasted_table = spark.sql(
+"""
+select tab1.ds, tab2.num_bikes_available, tab2.net_difference as groundtruth, tab1.yhat, tab1.yhat+tab2.num_bikes_available as inventory, 'prod' as environment
+from forecast_df tab1
+left join realtime_bike_status tab2
+on tab1.ds = tab2.last_reported_hour_est
+where tab1.stage='prod'
+union
+select tab1.ds, tab2.num_bikes_available, tab2.net_difference as groundtruth, tab1.yhat, tab1.yhat+tab2.num_bikes_available as inventory, 'stage' as environment
+from forecast_df tab1
+left join realtime_bike_status tab2
+on tab1.ds = tab2.last_reported_hour_est
+where tab1.stage='staging'
+order by tab1.ds
+""")
+forecasted_table.createOrReplaceTempView("forecasted_table")
+display(forecasted_table)
 
 # COMMAND ----------
 
-gold_data = f"{GROUP_DATA_PATH}gold_data.delta"
-(
-spark.createDataFrame(df_forecast)
-.write
-.format("delta")
-.mode("overwrite")
-.save(gold_data)
+plot_forecast_prod = spark.sql(
+"""
+with cte AS (
+select ds, yhat, inventory, 109 as capacity_track
+from forecasted_table 
+where ds = (select max(ds) from forecasted_table where num_bikes_available is not null)
+and environment = 'prod'
+union
+select ds, yhat, yhat, yhat as capacity_track
+from forecasted_table 
+where ds > (select max(ds) from forecasted_table where num_bikes_available is not null)
+and environment = 'prod'
 )
+select *, round(SUM(inventory) over (order by ds)) as final_inventory,
+round(SUM(capacity_track) over (order by ds)) as capacity_flow
+from cte
+order by ds
+"""
+)
+display(plot_forecast_prod)
+plot_forecast_prod.createOrReplaceTempView("plot_forecast_prod")
+plot_forecast_prod = plot_forecast_prod.toPandas()
 
 # COMMAND ----------
 
-# Calculate the recent num_bikes_available
-bike_forecast = df_forecast[(df_forecast.ds > last_reported) & (df_forecast.stage == 'prod')].reset_index(drop=True)
-bike_forecast['bikes_available'] = bike_forecast['yhat'].round() + num_bikes_available
-bike_forecast['ds'] = bike_forecast['ds'].dt.strftime("%Y-%m-%d %H:%M:%S")
+plot_forecast_stage = spark.sql(
+"""
+with cte AS (
+select ds, yhat, inventory, 109 as capacity_track
+from forecasted_table 
+where ds = (select max(ds) from forecasted_table where num_bikes_available is not null)
+and environment = 'stage'
+union
+select ds, yhat, yhat, yhat as capacity_track
+from forecasted_table 
+where ds > (select max(ds) from forecasted_table where num_bikes_available is not null)
+and environment = 'stage'
+)
+select *, round(SUM(inventory) over (order by ds)) as final_inventory,
+round(SUM(capacity_track) over (order by ds)) as capacity_flow
+from cte
+order by ds
+"""
+)
+display(plot_forecast_stage)
+plot_forecast_stage.createOrReplaceTempView("plot_forecast_stage")
+plot_forecast_stage = plot_forecast_stage.toPandas()
 
-# Forecast the available bikes for the next hours_to_forecast hours
-hours_to_forecast=4
-displayHTML(f"<h2>Forecast the available bikes for the next {hours_to_forecast} hours:</h2>")
-display(bike_forecast[['ds', 'bikes_available']].head(int(hours_to_forecast)))
+# COMMAND ----------
+
+#creating the gold table
+gold_monitoring = spark.sql(
+"""
+with cte AS (
+select ds, yhat, final_inventory, 'prod' as env 
+from plot_forecast_prod
+union
+select ds, yhat, final_inventory, 'stage' as env
+from plot_forecast_stage
+)
+select 
+ds, max(case when env='prod' then yhat end) as yhat_prod, max(case when env='prod' then final_inventory end) as final_inventory_prod, 
+max(case when env='stage' then yhat end) as yhat_stage, max(case when env='stage' then final_inventory end) as final_inventory_stage 
+from cte
+group by ds
+order by ds
+""")
+display(gold_monitoring)
+
+# COMMAND ----------
+
+
+gold_monitoring.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "gold"+ 'netChange_inventory').saveAsTable('netChange_inventory')
+
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 
 import plotly.express as px
-bike_forecast['station_capacity'] = 109
-bike_forecast['lower_bound'] = 0
-bike_forecast['ds'] = pd.to_datetime(bike_forecast['ds'], format="%Y-%m-%d %H:%M:%S")
-fig = px.line(bike_forecast, x='ds', y=['bikes_available','station_capacity', 'lower_bound'], color_discrete_sequence=['blue','black', 'black'])
+plot_forecast_prod['station_capacity'] = 109
+plot_forecast_prod['lower_bound'] = 0
+plot_forecast_prod['ds'] = pd.to_datetime(plot_forecast_prod['ds'], format="%Y-%m-%d %H:%M:%S")
+fig = px.line(plot_forecast_prod, x='ds', y=['final_inventory','station_capacity', 'lower_bound'], color_discrete_sequence=['blue','black', 'black'])
 fig.update_layout(title=f'{GROUP_STATION_ASSIGNMENT} bike forecast')
 fig.update_xaxes(title_text='time')
 fig.update_yaxes(title_text='bikes_available')
 fig.show()
 
-# COMMAND ----------
-
-# import plotly.express as px
-# import plotly.graph_objects as go
-# fig = go.Figure()
-# pd_plot["zero_stock"] = 0
-# fig.add_trace(go.Scatter(x=pd_plot.hour_window, y=pd_plot["new_available"], name='Forecasted available bikes',mode = 'lines+markers',
-# line = dict(color='blue', width=3, dash='solid')))
-# fig.add_trace(go.Scatter(x=pd_plot.hour_window[:4], y=pd_plot["new_available"][:4], mode = 'markers',name='Forecast for next 4 hours',
-# marker_symbol = 'triangle-up',
-# marker_size = 15,
-# marker_color="green"))
-# fig.add_trace(go.Scatter(x=pd_plot.hour_window, y=pd_plot["capacity"], name='Station Capacity (Overstock beyond this)',
-# line = dict(color='red', width=3, dash='dot')))
-# fig.add_trace(go.Scatter(x=pd_plot.hour_window, y=pd_plot["zero_stock"], name='Stock Out (Understock below this)',
-# line = dict(color='red', width=3, dash='dot')))
-# # Edit the layout
-# fig.update_layout(title='Forecasted number of available bikes',
-# xaxis_title='Forecasted Timeline',
-# yaxis_title='#bikes',
-# yaxis_range=[-5,100])
-# fig.show()
+hours_to_forecast=48
+displayHTML(f"<h2>Forecast the available bikes for the next {hours_to_forecast} hours.</h2>") 
+displayHTML("<p>By observing the black line's lower bound of 0, we can determine whether bikes are available at a given station or not. If the blue line goes above 0, it means that bikes are available, and if it goes below 0, it means that no bikes are available. The graph shows that more bikes are needed in the morning and fewer bikes are needed during the noon. One possible reason for this pattern is that rebalancing of bikes occurs during the noon, which improve the availability for bikes at that time.</p>")
 
 # COMMAND ----------
 
-# # Calcluate residuals
-# test_data.createOrReplaceTempView("test_data_view")
-# test_truth = spark.sql(""" select * from test_data_view """).toPandas()
-# test_truth['ts'] = test_truth['ts'].apply(pd.to_datetime)
-# results = df_monitor.merge(test_truth, left_on='ds', right_on='ts')
-# results['residual'] = results['yhat'] - results['netChange']
+# MAGIC %md
+# MAGIC #### Residual Plot
+# MAGIC ###### The residual plot on the real time data using the net hourly difference. The error will be little high in this case because we are not factoring the rebalacing that is taking place at the station. 
 
-# # # Plot the residuals
-# fig = px.scatter(results, x='yhat', y='residual', color='stage', marginal_y='violin', trendline='ols')
-# fig.update_layout(title=f'{GROUP_STATION_ASSIGNMENT} rental forecast model performance comparison')
-# fig.show()
+# COMMAND ----------
+
+
+residuals_table = spark.sql(
+"""
+select tab1.ds, tab2.net_difference as groundtruth, tab1.yhat,  (tab2.net_difference - tab1.yhat) as residuals
+from forecast_df tab1
+left join realtime_bike_status tab2
+on tab1.ds = tab2.last_reported_hour_est
+where tab1.stage='prod'
+and tab2.num_bikes_available is NOT NULL
+order by tab1.ds
+"""
+)
+residuals_table = residuals_table.toPandas()
+
+#plot the residuals
+import plotly.express as px
+fig = px.scatter(
+    residuals_table, x='yhat', y='residuals',
+    marginal_y='violin',
+    trendline='ols',
+)
+fig.show()
+
+# COMMAND ----------
+
+residuals_table.head()
+
+# COMMAND ----------
+
+
+residuals_table_stage = spark.sql(
+"""
+select tab1.ds, tab2.net_difference as groundtruth, tab1.yhat,  (tab2.net_difference - tab1.yhat) as residuals
+from forecast_df tab1
+left join realtime_bike_status tab2
+on tab1.ds = tab2.last_reported_hour_est
+where tab1.stage='staging'
+and tab2.num_bikes_available is NOT NULL
+order by tab1.ds
+"""
+)
+residuals_table_stage = residuals_table_stage.toPandas()
+
+# COMMAND ----------
+
+residuals_table_stage.head()
+
+# COMMAND ----------
+
+import numpy as np
+# promote_model=False 
+if promote_model:
+    prod_mae = np.mean(residuals_table['yhat'] - residuals_table['groundtruth'])
+    staging_mae = np.mean(residuals_table_stage['yhat'] - residuals_table_stage['groundtruth'])
+    
+    # If staging model has lower MAE, then move staging model to 'production' and production model to 'archive'
+    if staging_mae < prod_mae:
+        latest_production = client.get_latest_versions(GROUP_MODEL_NAME, stages=["Production"])[0]
+        client.transition_model_version_stage(name=GROUP_MODEL_NAME, version=latest_production.version, stage='Archive')
+        latest_staging = client.get_latest_versions(GROUP_MODEL_NAME, stages=["Staging"])[0]
+        client.transition_model_version_stage(name=GROUP_MODEL_NAME, version=latest_staging.version, stage='Production')
 
 # COMMAND ----------
 
