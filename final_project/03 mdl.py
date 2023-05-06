@@ -3,13 +3,13 @@
 
 # COMMAND ----------
 
-# start_date = str(dbutils.widgets.get('01.start_date'))
-# end_date = str(dbutils.widgets.get('02.end_date'))
-# hours_to_forecast = int(dbutils.widgets.get('03.hours_to_forecast'))
-# promote_model = bool(True if str(dbutils.widgets.get('04.promote_model')).lower() == 'yes' else False)
+start_date = str(dbutils.widgets.get('01.start_date'))
+end_date = str(dbutils.widgets.get('02.end_date'))
+hours_to_forecast = int(dbutils.widgets.get('03.hours_to_forecast'))
+promote_model = bool(True if str(dbutils.widgets.get('04.promote_model')).lower() == 'yes' else False)
 
-# print(start_date,end_date,hours_to_forecast, promote_model)
-# print("YOUR CODE HERE...")
+print(start_date,end_date,hours_to_forecast, promote_model)
+print("YOUR CODE HERE...")
 
 # COMMAND ----------
 
@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 sns.set(color_codes=True)
 import itertools
 ARTIFACT_PATH = "G07_model"
-np.random.seed(12345)
+np.random.seed(42)
 
 # COMMAND ----------
 
@@ -43,38 +43,35 @@ data.createOrReplaceTempView("merged_data")
 from pyspark.sql.functions import to_timestamp, date_format,unix_timestamp
 from pyspark.sql.functions import col
 data.createOrReplaceTempView("train_data")
-# train_df= spark.sql("""select * from train_data where startdate <'2023-01-01T00:00:00.000+0000' and startdate >='2021-11-20T00:00:00.000+0000'""")
-train_df= spark.sql("""select * from train_data where startdate >='2021-11-20T00:00:00.000+0000'""")
+train_df= spark.sql("""select * from train_data where startdate <='2023-01-01T00:00:00.000+0000' and startdate >='2021-11-20T00:00:00.000+0000'""")
+# train_df= spark.sql("""select * from train_data where startdate >='2021-11-20T00:00:00.000+0000'""")
 train_df.count()
 df_train = train_df.withColumnRenamed("startdate", "ds")
 df_train = df_train.withColumnRenamed("net_trip_difference", "y")
 display(df_train)
 df_train_pd=df_train.toPandas()
-
 # 
-
 
 # COMMAND ----------
 
-#Test data from jan 2023
-test_data = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverrealtime_bike_weather_merged') 
-display(test_data)
-test_data.createOrReplaceTempView("test_data")
-
-# from pyspark.sql.functions import col
-# data.createOrReplaceTempView("test_data")
-# test_df= spark.sql("""select * from test_data where startdate >='2023-01-01T00:00:00.000+0000'""")
-test_df= spark.sql("""select * from test_data""")
+from pyspark.sql.functions import col
+data.createOrReplaceTempView("test_data")
+test_df= spark.sql("""
+select *
+from test_data
+where startdate >='2023-01-01T00:00:00.000+0000'""")
 test_df.count()
 test_df = test_df.withColumnRenamed("startdate", "ds")
-test_df = test_df.withColumnRenamed("net_differece", "y")
+test_df = test_df.withColumnRenamed("net_trip_difference", "y")
 display(test_df)
 test_df_pd=test_df.toPandas()
+
 
 # COMMAND ----------
 
 import plotly.express as px
 df = data.toPandas()
+df.sort_values(by="startdate", inplace=True)
 fig = px.line(df, x="startdate", y="net_trip_difference", title='Net bike change')
 fig.show()
 
@@ -94,13 +91,13 @@ def root_mean_squared_error(y_true, y_pred):
 
 import itertools
 params = {  
-    'changepoint_prior_scale': [0.001, 0.01, 0.1,0.5],
+    'changepoint_prior_scale': [0.001, 0.01, 0.1,0.5], 
     'seasonality_prior_scale': [0.01, 0.1, 1.0, 10.0],
-    'seasonality_mode': ['additive','multiplicative'],
-    'holidays_prior_scale':[0.01, 10],
-    # 'yearly_seasonality' : [True],
-    # 'weekly_seasonality': [True],
-    # 'daily_seasonality': [True],
+    'seasonality_mode': ['additive'],
+    # 'holidays_prior_scale':[0.01, 10],
+    'yearly_seasonality' : [True],
+    'weekly_seasonality': [True],
+    'daily_seasonality': [True],
 
 }
 
@@ -140,38 +137,6 @@ for params in model_params:
 
         mae_scores.append((mae, model_uri))
         rmse_scores.append((rmse, model_uri))
-
-# COMMAND ----------
-
-# from fbprophet import Prophet
-# import numpy as np
-# import pandas as pd
-# from prophet.diagnostics import cross_validation, performance_metrics
-# mae_scores=[]
-# rmse_scores=[]
-# import mlflow
-# for params in model_params:
-#     with mlflow.start_run(): 
-#         model = Prophet(**params) 
-#         # holidays = pd.DataFrame({"ds": [], "holiday": []})
-#         model.add_regressor('temp')
-#         model.add_country_holidays(country_name='US')
-#         # model.add_regressor('main')
-#         # model.add_regressor('visibility')
-#         model.fit(df_train_pd)
-#         res =model.predict(test_df_pd.drop('y',axis=1))
-
-#         mae = mean_absolute_error(test_df_pd['y'], res['yhat'])
-#         rmse = root_mean_squared_error(test_df_pd['y'], res['yhat'])
-#         mlflow.prophet.log_model(model, artifact_path=ARTIFACT_PATH)
-#         mlflow.log_params(params)
-#         mlflow.log_metrics({'mae': mae})
-#         model_uri = mlflow.get_artifact_uri(ARTIFACT_PATH)
-#         print(f"Aritifacts: {model_uri}")
-
-
-#         mae_scores.append((mae, model_uri))
-#         rmse_scores.append((rmse, model_uri))
 
 # COMMAND ----------
 
@@ -246,25 +211,13 @@ except:
 # COMMAND ----------
 
 
-# promote_model = True # Remove this line
-# promote_model = False
-# if promote_model:
-#     client.transition_model_version_stage(
-#     name=model_details.name,
-#     version=model_details.version,
-#     stage='Production')
-# else:
-# client.transition_model_version_stage(
-# name=model_details.name,
-# version=model_details.version,
-# stage='Staging')
+if promote_model:
+    client.transition_model_version_stage(
+    name=model_details.name,
+    version=model_details.version,
+    stage='Production')
 
-# COMMAND ----------
-
-client.transition_model_version_stage(
-  name=model_details.name,
-  version=model_details.version,
-  stage='Staging')
+client.transition_model_version_stage( name=model_details.name,version=model_details.version,stage='Staging')
 
 # COMMAND ----------
 
