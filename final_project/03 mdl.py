@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 sns.set(color_codes=True)
 import itertools
 ARTIFACT_PATH = "G07_model"
-np.random.seed(12345)
+np.random.seed(42)
 
 # COMMAND ----------
 
@@ -44,15 +44,55 @@ from pyspark.sql.functions import to_timestamp, date_format,unix_timestamp
 from pyspark.sql.functions import col
 data.createOrReplaceTempView("train_data")
 # train_df= spark.sql("""select * from train_data where startdate <'2023-01-01T00:00:00.000+0000' and startdate >='2021-11-20T00:00:00.000+0000'""")
-train_df= spark.sql("""select * from train_data where startdate >='2021-11-20T00:00:00.000+0000'""")
-train_df.count()
+train_df= spark.sql("""select * from train_data where startdate >='2021-11-20T00:00:00.000+0000' and startdate <'2023-01-01T00:00:00.000+0000'""")
 df_train = train_df.withColumnRenamed("startdate", "ds")
 df_train = df_train.withColumnRenamed("net_trip_difference", "y")
 display(df_train)
 df_train_pd=df_train.toPandas()
+df_train_pd['ds'] = pd.to_datetime(df_train_pd['ds'])
+df_train_pd.sort_values(by='ds', inplace=True)
 
-# 
+# COMMAND ----------
 
+## Preparing Forecast Dataframe
+weather_real_time = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverweather_real_time_filtered') 
+weather_real_time.createOrReplaceTempView('silverweather_real_time_filtered')
+
+forecast_df = spark.sql(
+"""
+with cte as(
+select startdate, temp, humidity
+from train_data 
+where startdate >'2023-01-01T00:00:00.000+0000'
+union
+select startdate, temp, humidity 
+from silverweather_real_time_filtered
+where startdate > (select max(startdate) from train_data)
+)
+select *
+from cte
+order by startdate
+"""
+)
+forecast_df_pd = forecast_df.toPandas()
+
+
+# COMMAND ----------
+
+realtime_bike_status = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverrealtime_bike_status') 
+realtime_bike_status.createOrReplaceTempView('realtime_bike_status')
+forecast_df.createOrReplaceTempView('forecast_df')
+display(realtime_bike_status)
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC
+# MAGIC select tab1.startdate, tab2.num_bikes_available, tab2.net_difference as groundtruth, 'tab1.yhat', 'yhat+num_bikes as invenctory'
+# MAGIC from forecast_df tab1
+# MAGIC left join realtime_bike_status tab2
+# MAGIC on tab1.startdate = tab2.last_reported_hour_est
+# MAGIC order by tab1.startdate
 
 # COMMAND ----------
 
@@ -60,7 +100,6 @@ df_train_pd=df_train.toPandas()
 test_data = spark.read.format('delta').option('header', True).option('inferSchema', True).load('dbfs:/FileStore/tables/G07/silverrealtime_bike_weather_merged') 
 display(test_data)
 test_data.createOrReplaceTempView("test_data")
-
 # from pyspark.sql.functions import col
 # data.createOrReplaceTempView("test_data")
 # test_df= spark.sql("""select * from test_data where startdate >='2023-01-01T00:00:00.000+0000'""")
@@ -70,13 +109,34 @@ test_df = test_df.withColumnRenamed("startdate", "ds")
 test_df = test_df.withColumnRenamed("net_differece", "y")
 display(test_df)
 test_df_pd=test_df.toPandas()
+test_df_pd['ds'] = pd.to_datetime(test_df_pd['ds'])
+test_df_pd.sort_values(by='ds', inplace=True)
 
 # COMMAND ----------
 
 import plotly.express as px
 df = data.toPandas()
+df.sort_values(by="startdate", inplace=True)
 fig = px.line(df, x="startdate", y="net_trip_difference", title='Net bike change')
 fig.show()
+
+# COMMAND ----------
+
+futuredf = spark.sql(
+"""
+select startdate as ds, net_trip_difference as y
+from train_data 
+where startdate >'2023-01-01T00:00:00.000+0000'
+-- union
+-- select startdate as ds,temp
+-- from test_data 
+-- where startdate> '2023-03-31T00:00:00.000+0000'
+"""
+)
+
+futuredf_pd=futuredf.toPandas()
+futuredf_pd['ds'] = pd.to_datetime(futuredf_pd['ds'])
+futuredf_pd.sort_values(by='ds',inplace=True)
 
 # COMMAND ----------
 
@@ -94,14 +154,13 @@ def root_mean_squared_error(y_true, y_pred):
 
 import itertools
 params = {  
-    'changepoint_prior_scale': [0.001, 0.01, 0.1,0.5],
-    'seasonality_prior_scale': [0.01, 0.1, 1.0, 10.0],
-    'seasonality_mode': ['additive','multiplicative'],
-    'holidays_prior_scale':[0.01, 10],
-    # 'yearly_seasonality' : [True],
-    # 'weekly_seasonality': [True],
-    # 'daily_seasonality': [True],
-
+    'changepoint_prior_scale': [0.01],#[0.001, 0.01, 0.1,0.5],
+    'seasonality_prior_scale': [0.01], #[0.01, 0.1, 1.0, 10.0],
+    'seasonality_mode': ['additive'],#,'multiplicative'],
+    #'holidays_prior_scale':[0.01, 10]
+    'yearly_seasonality' : [True],
+    'weekly_seasonality': [True],
+    'daily_seasonality': [True]
 }
 
 # Generate all combinations of parameters
@@ -121,22 +180,21 @@ import mlflow
 for params in model_params:
     with mlflow.start_run(): 
         model = Prophet(**params) 
-        # holidays = pd.DataFrame({"ds": [], "holiday": []})
-        model.add_regressor('temp')
+        holidays = pd.DataFrame({"ds": [], "holiday": []})
+        #model.add_regressor('temp')
         model.add_country_holidays(country_name='US')
-        model.add_regressor('humidity')
+        #model.add_regressor('humidity')
         # model.add_regressor('visibility')
-        model.fit(df_train_pd)
-        res =model.predict(test_df_pd.drop('y',axis=1))
+        model.fit(df_train_pd[['ds','y']])
+        res = model.predict(futuredf_pd)
 
-        mae = mean_absolute_error(test_df_pd['y'], res['yhat'])
-        rmse = root_mean_squared_error(test_df_pd['y'], res['yhat'])
+        mae = mean_absolute_error(futuredf_pd['y'], res['yhat'])
+        rmse = root_mean_squared_error(futuredf_pd['y'], res['yhat'])
         mlflow.prophet.log_model(model, artifact_path=ARTIFACT_PATH)
         mlflow.log_params(params)
         mlflow.log_metrics({'mae': mae})
         model_uri = mlflow.get_artifact_uri(ARTIFACT_PATH)
         print(f"Aritifacts: {model_uri}")
-
 
         mae_scores.append((mae, model_uri))
         rmse_scores.append((rmse, model_uri))
@@ -169,7 +227,6 @@ for params in model_params:
 #         model_uri = mlflow.get_artifact_uri(ARTIFACT_PATH)
 #         print(f"Aritifacts: {model_uri}")
 
-
 #         mae_scores.append((mae, model_uri))
 #         rmse_scores.append((rmse, model_uri))
 
@@ -196,10 +253,13 @@ display(best_model_params)
 
 # test_df_pd=test_df.toPandas()
 best_model = mlflow.prophet.load_model(best_model_params['model'])
-results = best_model.predict(test_df_pd.drop('y',axis=1))
-test_df_pd['res']=results['yhat']
-display(test_df_pd)
+#results = best_model.predict(test_df_pd.drop('y',axis=1))
+#test_df_pd['res']=results['yhat']
+#display(test_df_pd)
 
+forecast = best_model.predict(forecast_df_pd)
+#forecast['y'] = futuredf_pd['y']
+display(forecast)
 
 # COMMAND ----------
 

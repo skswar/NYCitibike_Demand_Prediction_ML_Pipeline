@@ -130,7 +130,6 @@ display(avg_trips_by_holiday_status)
 # MAGIC %md 
 # MAGIC As we suspected that on a holiday we have lesser number of people using our bikes further confirming our hypothesis that the bikes at this station is being used primarily for commuting to work rather than leisure rides
 
-
 # COMMAND ----------
 
 # MAGIC %md
