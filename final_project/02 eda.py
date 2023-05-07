@@ -29,7 +29,9 @@ import pyspark.sql.functions as F
 
 # COMMAND ----------
 
-
+# MAGIC %md
+# MAGIC ###We have saved the visualizations as a HTML file which has both the EDA code and the plots.
+# MAGIC ###The HTML file has been uploaded on our Github repo.(02 eda.html)
 
 # COMMAND ----------
 
@@ -190,10 +192,6 @@ display(hourly_trend)
 #     .orderBy("day", "rounded_temp")
 
 # display(daily_trend)
-
-
-# COMMAND ----------
-
 
 
 # COMMAND ----------
