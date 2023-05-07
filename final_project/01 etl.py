@@ -618,7 +618,7 @@ clean_weather_final_df_delta.write.format("delta").mode("overwrite").option("ove
 
 # COMMAND ----------
 
-files=dbutils.fs.ls("dbfs:/FileStore/tables/G07/")
+files=dbutils.fs.ls("dbfs:/FileStore/tables/G07/bronze")
 for file in files:
     print(file.name)
 
@@ -642,6 +642,10 @@ stationstatus_real_time.createOrReplaceTempView('stationstatus_delta')
 
 # COMMAND ----------
 
+GROUP_STATION_ASSIGNMENT
+
+# COMMAND ----------
+
 # MAGIC %sql
 # MAGIC -- select count(*) from stationinfo_delta --1907
 # MAGIC select * from stationinfo_delta
@@ -659,7 +663,7 @@ stationstatus_real_time.createOrReplaceTempView('stationstatus_delta')
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ##### Preparing the Silver Table for Realtime Station Info Data with UTC Conversion
+# MAGIC ##### Preparing the Silver Table for Realtime Station Info Data
 
 # COMMAND ----------
 
@@ -681,20 +685,19 @@ ifnull(LAG(num_bikes_available) OVER(ORDER BY date_format(date_trunc('hour',last
 num_docks_available,num_bikes_disabled,net_availability
 FROM CTE WHERE RNUM=1
 )
-select date_format(from_utc_timestamp(last_reported_hour,'GMT-5'),'yyyy-MM-dd HH:mm:ss') as last_reported_hour_est,
-*, num_bikes_available - ifnull(LAG(num_bikes_available) OVER(ORDER BY last_reported_hour),0) net_difference
+select *, num_bikes_available - ifnull(LAG(num_bikes_available) OVER(ORDER BY last_reported_hour),0) net_difference
 FROM cte2
 order by last_reported_hour
 """
 )
 
+# COMMAND ----------
+
 realtime_bike_status.createOrReplaceTempView('realtime_bike_status_delta')
-display(realtime_bike_status)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ##### Saving Realtime bike status as a Silver Table with required columns.
+display(realtime_bike_status)
 
 # COMMAND ----------
 
@@ -704,7 +707,7 @@ realtime_bike_status.write.format("delta").mode("overwrite").option("overwriteSc
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC #### Preparing Real Time Bike-Weather Merged Silver Table Data. Handling UTC conversion.
+# MAGIC #### Preparing Real Time Bike-Weather Merged Silver Table Data
 
 # COMMAND ----------
 
@@ -732,31 +735,8 @@ display(realtime_bike_weather)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ##### Saving Realtime bike and weather data merged as a Silver Table with required columns
-
-# COMMAND ----------
-
 delta_table_name = "realtime_bike_weather_merged"
 realtime_bike_weather.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name) 
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Parsing Reatime Weather Only Data for use in Future Data Prediction and saving as Silver table only with required columns. The time is UTC converted.
-
-# COMMAND ----------
-
-weather_real_time_filtered = spark.sql(
-"""
-select date_format(from_utc_timestamp(from_unixtime(dt),'GMT-5'),'yyyy-MM-dd HH:mm:ss') as startdate,
-temp, humidity 
-from weather_real_time_delta
-order by startdate
-""")
-
-delta_table_name = "weather_real_time_filtered"
-weather_real_time_filtered.write.format("delta").mode("overwrite").option("overwriteSchema", "true").option("path", GROUP_DATA_PATH + "silver"+ delta_table_name).saveAsTable(delta_table_name) 
 
 # COMMAND ----------
 
