@@ -729,8 +729,6 @@ where stg2.temp is not null
 order by stg1.last_reported_hour
 """)
 
-# COMMAND ----------
-
 display(realtime_bike_weather)
 
 # COMMAND ----------
