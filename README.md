@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/logo.png" alt="Referral Network Logo"/>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/logo.png" alt="Databricks and Citibike Image" height=300/>
 </div>
 
 ## Establishing a GitHub account if your do not have one already
