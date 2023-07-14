@@ -1,5 +1,6 @@
-# dscc202-402-spring2023
-Course Materials for Data Science at Scale
+<div align="center">
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/logo.png" alt="Referral Network Logo"/>
+</div>
 
 ## Establishing a GitHub account if your do not have one already
 [Sign up for a new github account](https://docs.github.com/en/github/getting-started-with-github/signing-up-for-a-new-github-account) <br>
