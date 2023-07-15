@@ -48,8 +48,8 @@ Exploratory data analysis (EDA) played a pivotal role in this study as it provid
 
 + Seasonal Variations: Seasonal variations played a crucial role in ride counts. During winter, ride counts decreased due to snowfall and unfavorable weather conditions, whereas ride counts increased during summer and fall.
 <p align="center">
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/yearmonth_1.png" width="45%" height="30%"/>
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/yearmonth_2.png" width="45%" height="30%"/>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/yearmonth_1.png" width="450px" height="200px"/>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/yearmonth_2.png" width="450px" height="200px"/>
 </p>
   
 + Weekend Effect: There was a noticeable decrease in ride counts during weekends, suggesting a shift in user behavior. Factors such as visibility, cloud cover, and rain emerged as significant contributors to this trend.
@@ -64,8 +64,8 @@ Exploratory data analysis (EDA) played a pivotal role in this study as it provid
 
 + Holiday Impact: Holidays had a notable impact on ride counts, with a decline observed during these periods. In the are plot below, significant dips in bike usage were observed on specific dates, including Thanksgiving (Nov 25, 2021), Christmas Day (Dec 25, 2021), a snowstorm (Jan 29, 2022), President's Day (Feb 21, 2022), Easter (Apr 17), and Independence Day (Jul 4). These events and holidays contributed to reduced bike activity, indicating the influence of such occasions on Citi Bikes' usage.
 <p align="center">
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/holiday-effect.png" width="45%" height="30%"/>
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/monthly-effect.png" width="45%" height="30%"/>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/holiday-effect.png" width="450px" height="200px"/>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/monthly-effect.png" width="450px" height="200px"/>
 </p>
 
 + Temperature Influence: While not a dominant factor, a significant rise in temperature was found to reduce ride counts. This observation underscores the sensitivity of ridership to changes in weather conditions.
