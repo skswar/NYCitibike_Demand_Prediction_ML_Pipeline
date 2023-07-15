@@ -36,7 +36,7 @@ This approach ensured a streamlined process, enabling the team to effectively ha
 
 ### Building ETL
 Given the scale of the data involved, it was imperative to design an optimized and efficient data pipeline that could seamlessly handle both incoming and existing data. The project utilized two primary data sources: historical data files spanning a two-year period, and live data updates received every 30 minutes. The objective was to leverage the historical data for training a forecasting model, validate its performance using the live data, and utilize the model to predict demand for the next 24 hours or more.<br>
-To achieve this, separate table structures and relations were created for the historic and real-time data. The dataset consisted of two years' worth of trip history details, two years of historical weather data (with occasional gaps), and three other data sources updated every 30 minutes. The pipeline architecture followed the Medallion format, where raw data was stored in bronze tables, and data relevant for model training was cleaned, merged, and stored in silver tables. Additionally, API calls were made to address missing weather data.<br>
+To achieve this, separate table structures and relations were created for the historic and real-time data. The dataset consisted of two years' worth of trip history details, two years of historical weather data (with occasional gaps), and three other data sources updated every 30 minutes. The pipeline architecture followed the Medallion format, where raw data was stored in bronze tables, and data relevant for model training was cleaned, merged, and stored in silver tables. Additionally, API calls were made to address missing weather data. Gold tables were reserved for inference and monitoring model/data. The ETL pipleine was made immutable so that no side effects occur while running it multiple times with the same input data.<br>
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/ETL_Arch.png" alt="ETL Architecture height="70%" width="70%"/></p>
@@ -79,4 +79,8 @@ Exploratory data analysis (EDA) played a pivotal role in this study as it provid
 </p>
 
 These findings played a **critical role in informing the subsequent data modeling** process, enabling the development of models tailored to improve prediction accuracy.
+
+### Building ML Model
+After performing the necessary data storage and preprocessing, the next step involved building the forecasting model. In this project, we utilized the popular FB-Prophet model, which took into account the monthly, daily, and hourly seasonality patterns identified during the exploratory data analysis (EDA). Holiday effects were also incorporated into the Prophet model. To track and manage the model artifacts, parameters, and metrics, we leveraged Databrick's MLflow Tracking. This allowed us to compare different models, select the best one, and easily reuse the chosen model. Additionally, MLflow Registry facilitated the smooth transition of the best model from staging to production, ensuring that the model could be continually updated based on new incoming data.
+
 
