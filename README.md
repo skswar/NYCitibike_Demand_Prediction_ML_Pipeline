@@ -44,6 +44,21 @@ To achieve this, separate table structures and relations were created for the hi
 This carefully designed architecture ensured a robust and efficient data pipeline, facilitating the extraction, transformation, and loading of data for analysis and modeling purposes.
 
 ### Perfroming EDA
-EDA was an essential step in this process becuase it was important to inform us about the usage of the Citi Bikes and understand its operational demand. SOme of the key factors that EDA confrimed us was
+Exploratory data analysis (EDA) played a pivotal role in this study as it provided valuable insights into the usage patterns and operational demand of Citi Bikes. Key findings from the analysis include:
 
++ Seasonal Variations: Seasonal variations played a crucial role in ride counts. During winter, ride counts decreased due to snowfall and unfavorable weather conditions, whereas ride counts increased during summer and fall.
+<p align="center">
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/earmonth.png" alt="ETL Architecture width="40%"/>
+
+</p>
+  
++ Weekend Effect: There was a noticeable decrease in ride counts during weekends, suggesting a shift in user behavior. Factors such as visibility, cloud cover, and rain emerged as significant contributors to this trend.
+
++ Hourly Patterns: Ride counts exhibited distinct patterns based on the hour of the day. Increased ride activity was observed during early morning and evening hours, corresponding to office commute times. This finding indicated a substantial user base consisting of daily office goers.
+
++ Holiday Impact: Holidays had a notable impact on ride counts, with a decline observed during these periods. This finding highlighted the influence of holidays on user behavior and demand for Citi Bikes.
+
++ Temperature Influence: While not a dominant factor, a significant rise in temperature was found to reduce ride counts. This observation underscores the sensitivity of ridership to changes in weather conditions.
+
++ These findings played a critical role in informing the subsequent data modeling process, enabling the development of models tailored to improve prediction accuracy.
 
