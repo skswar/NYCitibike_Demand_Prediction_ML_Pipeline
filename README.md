@@ -13,8 +13,9 @@
 * [Methodology](#methodology)
   * [Building ETL](#building-etl)
   * [Performing EDA](#performing-eda)
-  * [Buidling ML Model](#buidling-ml-model)
-  * [ML Model Registry and Real Time Model Updation](#ml-model-registry-and-real-time-model-updation)
+  * [Buidling ML Model and Registry](#buidling-ml-model-and-registry)
+  * [Application and Real Time Model Updation](#application-and-real-time-model-updation)
+* [Conclusion](#conclusion)
   
 
 <hr>
@@ -35,13 +36,15 @@ To efficiently handle the large volume of data and deliver timely insights, a we
 This approach ensured a streamlined process, enabling the team to effectively handle the data, gain insights, and continuously improve the machine learning models.
 
 ### Building ETL
-Given the scale of the data involved, it was imperative to design an optimized and efficient data pipeline that could seamlessly handle both incoming and existing data. The project utilized two primary data sources: historical data files spanning a two-year period, and live data updates received every 30 minutes. The objective was to leverage the historical data for training a forecasting model, validate its performance using the live data, and utilize the model to predict demand for the next 24 hours or more.<br>
+Given the scale of the data involved, it was imperative to design an optimized and efficient data pipeline that could seamlessly handle both incoming and existing data. The project utilized two primary data sources: historical data files spanning a two-year period, and live data updates received every 30 minutes. The objective was to leverage the historical data for training a forecasting model, validate its performance using the live data, and utilize the model to predict demand for the next 48 hours or more.<br>
 To achieve this, separate table structures and relations were created for the historic and real-time data. The dataset consisted of two years' worth of trip history details, two years of historical weather data (with occasional gaps), and three other data sources updated every 30 minutes. The pipeline architecture followed the Medallion format, where raw data was stored in bronze tables, and data relevant for model training was cleaned, merged, and stored in silver tables. Additionally, API calls were made to address missing weather data. Gold tables were reserved for inference and monitoring model/data. The ETL pipleine was made immutable so that no side effects occur while running it multiple times with the same input data.<br>
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/ETL_Arch.png" alt="ETL Architecture height="70%" width="70%"/></p>
 
 This carefully designed architecture ensured a robust and efficient data pipeline, facilitating the extraction, transformation, and loading of data for analysis and modeling purposes.
+
+**Link to Code**: [ETL File](<https://github.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/blob/master/final_project/01%20etl.py>)
 
 ### Performing EDA
 Exploratory data analysis (EDA) played a pivotal role in this study as it provided valuable insights into the usage patterns and operational demand of Citi Bikes. Key findings from the analysis include:
@@ -80,7 +83,23 @@ Exploratory data analysis (EDA) played a pivotal role in this study as it provid
 
 These findings played a **critical role in informing the subsequent data modeling** process, enabling the development of models tailored to improve prediction accuracy.
 
-### Building ML Model
-After performing the necessary data storage and preprocessing, the next step involved building the forecasting model. In this project, we utilized the popular FB-Prophet model, which took into account the monthly, daily, and hourly seasonality patterns identified during the exploratory data analysis (EDA). Holiday effects were also incorporated into the Prophet model. To track and manage the model artifacts, parameters, and metrics, we leveraged Databrick's MLflow Tracking. This allowed us to compare different models, select the best one, and easily reuse the chosen model. Additionally, MLflow Registry facilitated the smooth transition of the best model from staging to production, ensuring that the model could be continually updated based on new incoming data.
+**Link to Code**: [EDA File](<https://github.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/blob/master/final_project/02%20eda.py>)
 
+### Buidling ML Model and Registry
+After performing the necessary data storage and preprocessing, the next step involved building the forecasting model. In this project, we utilized the popular FB-Prophet model, which took into account the monthly, daily, and hourly seasonality patterns identified during the exploratory data analysis (EDA). Holiday effects were also incorporated into the Prophet model. To track and manage the model artifacts, parameters, and metrics, we leveraged Databrick's MLflow Tracking. This allowed us to compare different models, select the best one, and easily reuse the chosen model. Additionally, MLflow Registry facilitated the smooth transition of the best model from staging to production, ensuring that the model could be continually used based on new incoming data. Although there was options of adding different version of our model into the ML Model Registry and use only the model giving best peformance. But FB-Prophet in this case was giving much better performance than other and therefore the our model registry contained only the prophet model version which was transitioned into stage and used thereafter.
 
+**Link to Code**: [ML Model File](<https://github.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/blob/master/final_project/03%20mdl.py>)
+
+### Application and Real Time Model Updation
+In the final phase of our project, we focused on monitoring the performance of the forecasting model as new data arrived every 30 minutes. To accomplish this, we utilized the gold tables to track the live performance of the model. This allowed us to promptly take action if the model's performance fell below a predefined threshold and update the model accordingly.
+
+The implementation involved loading both the production and staging models, which were trained during the Model Development stage. We then loaded real-time data on the bike status at specific a station, along with real-time and forecasted weather data. The forecasted weather data served as regressors to predict bike availability in the next 48 hours. Using both the staging and production models, we forecasted the bike inventory.
+
+To compare the performance of the staging and production models, we examined the residuals data until the ground truth data was available. Based on the residuals plot, the code was designed to promote the staging model to production when deemed appropriate.
+
+The following image depicts the forecast that was made to understand demand at a particular station
+<p align="center">
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/temp-effect.png" width="500" height="200"/>
+</p>
+
+**Link to Code**: [Application Monitoring File](<https://github.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/blob/master/final_project/04%20app.py>)
