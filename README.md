@@ -40,7 +40,7 @@ Given the scale of the data involved, it was imperative to design an optimized a
 To achieve this, separate table structures and relations were created for the historic and real-time data. The dataset consisted of two years' worth of trip history details, two years of historical weather data (with occasional gaps), and three other data sources updated every 30 minutes. The pipeline architecture followed the Medallion format, where raw data was stored in bronze tables, and data relevant for model training was cleaned, merged, and stored in silver tables. Additionally, API calls were made to address missing weather data. Gold tables were reserved for inference and monitoring model/data. The ETL pipleine was made immutable so that no side effects occur while running it multiple times with the same input data.<br>
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/ETL_Arch.png" alt="ETL Architecture height="70%" width="70%"/></p>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/ETL_Arch.png" alt="ETL Architecture" height="70%" width="70%"/></p>
 
 This carefully designed architecture ensured a robust and efficient data pipeline, facilitating the extraction, transformation, and loading of data for analysis and modeling purposes.
 
