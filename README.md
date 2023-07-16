@@ -93,13 +93,18 @@ After performing the necessary data storage and preprocessing, the next step inv
 ### Application and Real Time Model Updation
 In the final phase of our project, we focused on monitoring the performance of the forecasting model as new data arrived every 30 minutes. To accomplish this, we utilized the gold tables to track the live performance of the model. This allowed us to promptly take action if the model's performance fell below a predefined threshold and update the model accordingly.
 
-The implementation involved loading both the production and staging models, which were trained during the Model Development stage. We then loaded real-time data on the bike status at specific a station, along with real-time and forecasted weather data. The forecasted weather data served as regressors to predict bike availability in the next 48 hours. Using both the staging and production models, we forecasted the bike inventory.
+The implementation involved loading both the production and staging models, which were trained during the Model Development stage. We then loaded real-time data on the bike status at a specific station, along with real-time and forecasted weather data. The forecasted weather data served as regressors to predict bike availability in the next 48 hours. Using both the staging and production models, we forecasted the bike inventory.
 
 To compare the performance of the staging and production models, we examined the residuals data until the ground truth data was available. Based on the residuals plot, the code was designed to promote the staging model to production when deemed appropriate.
 
 The following image depicts the forecast that was made to understand demand at a particular station
 <p align="center">
-<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/temp-effect.png" width="500" height="200"/>
+<img src="https://raw.githubusercontent.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/master/img/forecast_1.png" width="600" height="150"/>
 </p>
 
 **Link to Code**: [Application Monitoring File](<https://github.com/skswar/NYCitibike_Demand_Prediction_ML_Pipeline/blob/master/final_project/04%20app.py>)
+
+
+## Conclusion
+This project aimed to develop an end-to-end machine learning application to assist businesses like NY Citi Bike in understanding and addressing the demand for their services, thereby improving operational efficiency. The utilization of Databricks, with its robust capabilities, proved instrumental in processing large volumes of data efficiently. Additionally, it provided a comprehensive platform for data visualization, Python/SQL coding, and deploying and monitoring multiple models all under one umbrella. Managing multiple machine learning models, finding optimal hyperparameters, and tracking model artifacts can be challenging, but Databricks simplified these tasks through the use of ML-Flow and ML-Registry. This is particularly valuable in visualizing, maintaining and improving prediction performance and automating the overall flow. Overall, this project was a valuable learning experience, highlighting the advancements in technology and their potential to drive business growth in a competitive market.
+
